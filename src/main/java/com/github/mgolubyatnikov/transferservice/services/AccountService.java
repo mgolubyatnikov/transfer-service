@@ -26,7 +26,7 @@ public class AccountService {
         return accountDao.findAll();
     }
 
-    public Account getAccount(@PathParam("id") Long id) {
+    public Account getAccount(Long id) {
         return accountDao.findById(id);
     }
 
