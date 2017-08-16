@@ -30,7 +30,7 @@ public class AccountService {
         return accountDao.findById(id);
     }
 
-    public Account createAccount(@NotNull @Valid Account account) {
+    public Account createAccount(Account account) {
         return jdbi.inTransaction(new AccountTransaction(account));
     }
 
