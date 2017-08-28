@@ -78,8 +78,14 @@ public class TransferService {
             sourceAccount.withdraw(transfer.getAmount());
             destinationAccount.deposit(transfer.getAmount());
 
-            accountDao.update(sourceAccount);
-            accountDao.update(destinationAccount);
+            Integer updates = accountDao.update(sourceAccount);
+            if (updates == 0) {
+                throw new ServiceException("Optimistic lock failed: " + transfer.getSourceAccountId());
+            }
+            updates = accountDao.update(destinationAccount);
+            if (updates == 0) {
+                throw new ServiceException("Optimistic lock failed: " + transfer.getDestinationAccountId());
+            }
 
             Long transferId = transferDao.insert(transfer);
 
