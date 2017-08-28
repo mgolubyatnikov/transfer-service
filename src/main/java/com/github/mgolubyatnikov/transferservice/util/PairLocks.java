@@ -2,9 +2,11 @@ package com.github.mgolubyatnikov.transferservice.util;
 
 import com.google.common.util.concurrent.Striped;
 
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.concurrent.locks.Lock;
 
-public class PairLocks<T extends Comparable<T>> {
+public class PairLocks<T> {
 
     private final Striped<Lock> locks;
 
@@ -13,19 +15,10 @@ public class PairLocks<T extends Comparable<T>> {
     }
 
     public PairLock get(T object1, T object2) {
-        T min;
-        T max;
+        Iterator<Lock> lockIterator = locks.bulkGet(Arrays.asList(object1, object2)).iterator();
 
-        if (object1.compareTo(object2) < 0) {
-            min = object1;
-            max = object2;
-        } else {
-            min = object2;
-            max = object1;
-        }
-
-        Lock lock1 = locks.get(min);
-        Lock lock2 = locks.get(max);
+        Lock lock1 = lockIterator.next();
+        Lock lock2 = lockIterator.next();
 
         return new PairLock(lock1, lock2);
     }
@@ -46,8 +39,8 @@ public class PairLocks<T extends Comparable<T>> {
         }
 
         public void unlock() {
-            lock1.unlock();
             lock2.unlock();
+            lock1.unlock();
         }
     }
 }

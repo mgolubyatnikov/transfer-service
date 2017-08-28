@@ -14,7 +14,9 @@ import javax.ws.rs.core.GenericType;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -150,20 +152,42 @@ public class IntegrationTest {
 
     @Test
     public void postTransfer_AccountBalancesUpdated_Concurrent() throws InterruptedException {
-        Account account1 = accountsWebTarget.path(ID_1).request().get(Account.class);
-        Account account2 = accountsWebTarget.path(ID_2).request().get(Account.class);
+        int accountsNumber = 10;
 
-        BigDecimal balancesSum = account1.getBalance().add(account2.getBalance());
+        List<Account> accounts = new ArrayList<>();
+        for (int i = 0; i < accountsNumber; i++) {
+            BigDecimal randomBalance = BigDecimal.valueOf(Math.random() * 10000)
+                    .setScale(2, BigDecimal.ROUND_HALF_UP);
+            final Account account = new Account(randomBalance);
+
+            Account newAccount = accountsWebTarget.request()
+                    .post(Entity.entity(account, MediaType.APPLICATION_JSON_TYPE))
+                    .readEntity(Account.class);
+            accounts.add(newAccount);
+        }
+
+        BigDecimal balancesSum = accounts.stream()
+                .map(Account::getBalance)
+                .reduce(BigDecimal::add).get();
+
+        Random random = new Random();
 
         ExecutorService executorService = Executors.newFixedThreadPool(30);
-        for (int i = 0; i < 150; i++) {
+        for (int i = 0; i < 500; i++) {
             executorService.submit(() -> {
-                Long sourceAccountId = (Math.random() <= 0.5) ? 1L : 2L;
-                Long destinationAccountId = (sourceAccountId == 1L) ? 2L : 1L;
                 BigDecimal randomAmount = BigDecimal.valueOf(Math.random() * 100)
                         .setScale(2, BigDecimal.ROUND_HALF_UP);
 
-                final Transfer transfer = new Transfer(sourceAccountId, destinationAccountId, randomAmount);
+                int sourceAccountId = random.nextInt(accountsNumber);
+                int destinationAccountId = random.nextInt(accountsNumber);
+                if (sourceAccountId == destinationAccountId) {
+                    return;
+                }
+
+                Account sourceAccount = accounts.get(sourceAccountId);
+                Account destinationAccount = accounts.get(destinationAccountId);
+
+                final Transfer transfer = new Transfer(sourceAccount.getId(), destinationAccount.getId(), randomAmount);
                 transfersWebTarget.request()
                         .post(Entity.entity(transfer, MediaType.APPLICATION_JSON_TYPE));
             });
@@ -172,10 +196,14 @@ public class IntegrationTest {
         boolean terminated = executorService.awaitTermination(120, TimeUnit.SECONDS);
         assertTrue("awaitTermination timeout", terminated);
 
-        Account updatedAccount1 = accountsWebTarget.path(ID_1).request().get(Account.class);
-        Account updatedAccount2 = accountsWebTarget.path(ID_2).request().get(Account.class);
+        List<Account> updatedAccounts = new ArrayList<>();
+        for (Account account : accounts) {
+            updatedAccounts.add(accountsWebTarget.path(String.valueOf(account.getId())).request().get(Account.class));
+        }
 
-        BigDecimal newBalancesSum = updatedAccount1.getBalance().add(updatedAccount2.getBalance());
+        BigDecimal newBalancesSum = updatedAccounts.stream()
+                .map(Account::getBalance)
+                .reduce(BigDecimal::add).get();
 
         assertEquals(newBalancesSum, balancesSum);
     }
